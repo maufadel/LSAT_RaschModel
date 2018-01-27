@@ -1,0 +1,16 @@
+model {
+# Rasch model
+   for (j in 1:N) {
+      for (k in 1:K) {
+         logit(p[j,k]) <- beta*theta[j]-alpha[k];
+         r[j,k] ~ dbern(p[j,k]);
+      }
+      theta[j] ~ dnorm(0,1);
+   }
+# Priors
+   for (k in 1:K) {
+      alpha[k] ~ dnorm(0,0.0001);
+      a[k] <- alpha[k] - mean(alpha[]);
+   }
+   beta ~ dnorm(0,0.0001)I(0,);
+}

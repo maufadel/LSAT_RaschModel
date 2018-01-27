@@ -1,0 +1,551 @@
+---
+title: 'SDS Final Project'
+author: |
+  | Mauricio Fadel Argerich
+date: '29/09/2017'
+output:
+  html_document:
+    toc: no
+header-includes: \usepackage{graphicx}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\section*{LSAT: item response}
+
+# Introduction
+
+## The Data
+Section 6 of the Law School Aptitude Test (LSAT) in the United States is a 5-item multiple choice test. Boch and Lieberman (1970) present the LSAT Section 6 results of $N = 1000$ students. Each of these results is a vector with the answers of the student to each question. The result for each question is encoded as 1 if the student answered correctly and 0 otherwise. In this way, the data can be expresed as the following matrix:
+<table >
+<tr>
+<td>Student</td>
+<td>Results</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0 0 0 0 0</td>
+</tr>
+</tr>
+<tr>
+<td>2</td>
+<td>0 1 0 0 0</td>
+</tr>
+</tr>
+<tr>
+<td>3</td>
+<td>0 0 1 0 1</td>
+</tr>
+</tr>
+<tr>
+<td>4</td>
+<td>1 0 1 1 0</td>
+</tr>
+</tr>
+<tr>
+<td>5</td>
+<td>1 1 1 0 1</td>
+</tr>
+</table>
+
+To analyze these data let's use the *Rasch Model*. 
+
+## The Rasch Model
+The Rasch Model is broadly used to analyze categorical data, such as answers to questionnaires, as a trade-off between the respondent's ability and the item difficulty [^1]. 
+With this model, the probability $p_{ij}$ that the student $i$ responds correctly to item $j$, is assumed to follow a logistic function parameterized by a latent variable $\theta_i$ representing the student's underlying ability and an "item difficulty" or threshold parameter $\alpha_j$. That is:
+
+$$
+p_{ij} = \frac{exp(\theta_i - \alpha_j)}{1+exp(\theta_i-\alpha_j)} \\
+\forall i = 1,...,N; \ \ \ j = 1,...,K \\
+x_{ij} \sim Bernoulli(p_{ij})
+$$
+
+## The Model
+As it has already been said, the data are the LSAT Section 6 results for 1000 students. With these data, the difficulty for each item of the test $\alpha_j$ and the ability for each student $\theta_i$ will be inferred. The ability parameters are assumed to have a Normal distribution in the population of students with mean 0 and unknown precision. To make the job easier, the parameter $\beta^2 = \frac{1}{\tau}$ will be added to the model, assuming that the $\theta_i \sim N(0, 1)$. Thus, the following model will be implemented:
+$$
+p_{ij} = \frac{exp(\beta\theta_i - \alpha_j)}{1+exp(\beta\theta_i-\alpha_j)} \\
+\forall i = 1,...,N; \ \ \ j = 1,...,K \\
+\theta_i \sim Normal(0, 1) \\
+and\ \beta^2 = \frac{1}{\tau}
+$$
+Standard vague Normal priors for each of the $\alpha_j$ and a vague standard truncated normal for $\beta$ are assumed.
+$$
+\alpha_j \sim N(0,10000) \\
+\beta \sim N(0,10000)I(0,\infty)
+$$
+
+## Joint Likelihood
+The joint, or unconditional, likelihood of the model is given by
+$$
+L_u(\theta,\alpha,\beta|x) = \prod_{i=1}^{N} \prod_{j=1}^{K} p_{ij}^{x_ij}(1-p_{ij})^{1-x_{ij}} \\
+ = \prod_{i=1}^{N} \prod_{j=1}^{K} (\frac{exp(\beta\theta_i - \alpha_j)}{1+exp(\beta\theta_i-\alpha_j)})^{x_{ij}}(1-(\frac{exp(\beta\theta_i - \alpha_j)}{1+exp(\beta\theta_i-\alpha_j)}))^{1-x_{ij}} \\
+ = \prod_{i=1}^{N} \prod_{j=1}^{K} \frac{exp(x_{ij}(\beta\theta_i - \alpha_j))}{(1+exp(\beta\theta_i-\alpha_j))^{x_{ij}}}(\frac{1+exp(\beta\theta_i-\alpha_j)-exp(\beta\theta_i - \alpha_j)}{1+exp(\beta\theta_i-\alpha_j)})^{1-x_{ij}} \\
+= \prod_{i=1}^{N} \prod_{j=1}^{K} \frac{exp(x_{ij}(\beta\theta_i - \alpha_j))}{(1+exp(\beta\theta_i-\alpha_j))^{x_{ij}}}(\frac{1^{1-x_{ij}}}{(1+exp(\beta\theta_i-\alpha_j))^{1-x_{ij}}}) \\
+= \prod_{i=1}^{N} \prod_{j=1}^{K} \frac{exp(x_{ij}(\beta\theta_i - \alpha_j))}{(1+exp(\beta\theta_i-\alpha_j))^{x_{ij}+1-x_{ij}}} \\
+= \prod_{i=1}^{N} \prod_{j=1}^{K} \frac{exp(x_{ij}(\beta\theta_i - \alpha_j))}{(1+exp(\beta\theta_i-\alpha_j)} \\
+= \frac{exp(\sum_{i=1}^{N} \sum_{j=1}^{K} \beta \theta_i x_{ij} - \alpha_j x_{ij})}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j)} \\
+= \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j)}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j)} \\
+where \\
+r_i = \sum_{j=1}^{K} x_{ij} \ ,\  total\ score\ for\ student\ i \\
+s_j = \sum_{i=1}^{N} x_{ij} \ ,\  total\ score\ for\ item\ j \\
+$$
+
+## Posterior distribution
+Now that the joint likelihood and priors for each parameter have been obtained, we know that our posterior will be
+
+$$
+\pi(\theta,\alpha,\beta|x) \propto L_u(\theta, \alpha, \beta | x) \times \pi(\theta) \times \pi(\alpha) \times \pi(\beta) \\
+where \\
+L_u(\theta, \alpha, \beta | x) = \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j)}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j)} \\
+\pi(\theta) = \frac{1}{\sqrt{2\pi}}exp(-\frac{\theta^2}{2}) \\
+\pi(\alpha) = \frac{1}{\sqrt{2\pi\sigma_{\alpha}^2}}exp(-\frac{\alpha^2}{2\sigma_{\alpha}^2}) \\
+\pi(\beta) = \frac{1}{\sqrt{2\pi\sigma_{\beta}^2}}exp(-\frac{\beta^2}{2\sigma_{\beta}^2}) \\
+$$
+
+## Full Conditionals
+To perform the Metropolis algorithm it is necessary to obtain the full conditionals for each parameter:
+
+### Full Conditional of $\alpha_j$
+$$
+\pi(\alpha_j|\beta, \alpha_{(j)},\theta_i,x_{ij}) = L_u \times \pi(\alpha_j),\ \ \alpha_{(j)} = {\alpha_1,...,\alpha_{j-1},\alpha_{j+1},...,\alpha_K} \\
+= \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j)}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j))} \frac{1}{\sqrt{2\pi\sigma_{\alpha_j}^2}}exp(-\frac{\alpha_j}{2\sigma_{\alpha_j}^2}) \\
+= \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j-\frac{\alpha_j}{2\sigma_{\alpha_j}^2})}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j)) \sqrt{2\pi\sigma_{\alpha_j}^2}} \\
+getting\ rid\ of\ constants...\\
+\propto \frac{exp(-\alpha_j s_j-\frac{\alpha_j}{2\sigma_{\alpha_j}^2})}{\prod_{i=1}^{N} (1+exp(\beta\theta_i-\alpha_j))} \\
+$$
+
+### Full Conditional of $\theta_i$
+$$
+\pi(\theta_i|\beta, \alpha_{j},\theta_{(i)},x_{ij}) = L_u \times \pi(\alpha_j),\ \ \theta_{(i)} = {\theta_1,...,\theta_{i-1},\theta_{i+1},...,\theta_N} \\
+= \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j)}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j))} \frac{1}{\sqrt{2\pi\sigma_{\theta_i}^2}}exp(-\frac{\theta_i}{2\sigma_{\theta_i}^2}) \\
+= \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j-\frac{\theta_i}{2\sigma_{\theta_i}^2})}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j)) \sqrt{2\pi\sigma_{\theta_i}^2}} \\
+getting\ rid\ of\ constants...\\
+\propto \frac{exp(\beta \theta_i r_i -\frac{\theta_i}{2\sigma_{\theta_i}^2})}{\prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j))} \\
+$$
+
+### Full Conditional of $\beta$
+$$
+\pi(\beta|\alpha_j,\theta_i,x_{ij}) = L_u \times \pi(\beta) \\
+= \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j)}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j))} \frac{1}{\sqrt{2\pi\sigma_{\beta}^2}}exp(-\frac{\beta}{2\sigma_{\beta}^2}) \\
+= \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i - \sum_{j=1}^{K} \alpha_j s_j-\frac{\beta}{2\sigma_{\beta}^2})}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j)) \sqrt{2\pi\sigma_{\beta}^2}} \\
+getting\ rid\ of\ constants...\\
+\propto \frac{exp(\beta \sum_{i=1}^{N} \theta_i r_i -\frac{\beta}{2\sigma_{\beta}^2})}{\prod_{i=1}^{N} \prod_{j=1}^{K} (1+exp(\beta\theta_i-\alpha_j))} \\
+$$
+
+## Maximum Marginal Likelihood
+Even though it is possible to estimate the parameters of the Rasch Model using the Joint Likelihood, the estimates for the item parameters are inconsistent when $n \rightarrow \infty$, and biased in finite samples.
+A more robust approach is to use the Maximum Marginal Likelihood (MML). To calculate the MML, we assumed a distribution for the latent ability parameter of the population, usually $\theta \sim N(0,1)$ and then integrate out the person parameter:
+$$
+L_m = \prod_m [exp(-\sum_i\alpha_i s_i)\int\frac{exp(\beta\theta r)}{\prod_{i=1}^{k}(1+exp(\beta\theta-\alpha_i))}dG(\theta)]^{n_r}
+$$
+MML estimates are unbiased and consistent as $n \rightarrow \infty$. Once we have estimated the values for $\alpha_j$, we can estimate the ability parameters using the Joint Likelihood and assuming the $\alpha_j$ to be known.
+It is possible to estimate the parameters using MML in R by using the package *ltm* (Rizopoulos, 2009). 
+
+# Testing The Model
+To check the ability of the Bayesian analysis to recover the true parameters, arbitrary values will be assiged to $\beta = 1$ and $\overline{\alpha} = (-2, -1, 0, 2)$, and then the results data for 1000 students will be simulated. In this way, the result to each question by each student will be drawn from a Bernoulli distribution with parameter $p = \frac{e^{(\theta_i-\alpha_j)}}{1+(e^{(\theta_i-\alpha_j)})}$.
+Finally, the parameters $\beta$ and $\alpha_j$ will be estimated using the Bayesian analysis as well as the Maximum Marginal Likelihood for comparison.
+
+```{r test_model_ltm, warning=FALSE}
+
+set.seed(1739634)
+theta_rasch_true = rnorm(1000)
+
+# Generate a matrix of responses from N students alpha represents the difficulty of 
+# the items in the test and sigma.theta is the standard deviation of the Normal
+# distribution for the ability of the students.
+generateData <- function(N, beta, alpha) {
+  # Create empty matrix of responses.
+  res = matrix(NA, nrow = N, ncol = length(alpha))
+  
+  for (j in 1:N) {
+    # For every student we get his/her ability by drawing a sample from 
+    # a N(0,sigma.theta).
+    theta = theta_rasch_true[j]
+    
+    for (k in 1:length(alpha)) {
+      # We simulate the result of the answer of the student j to question k by 
+      # drawing a sample from a Bernoulli distribution calculating p according
+      # to the specification of the Rasch model for dichotomous data.
+      p = exp(beta*theta - alpha[k]) / (1 + exp(beta*theta - alpha[k]))
+      res[j,k] = rbinom(1, 1, p)
+    }
+  }
+  
+  return(res)
+}
+
+
+rr = generateData(1000, 1, c(-2, 0, 1, 1))
+
+# We check the ability of the model using ltm, which calculates the Marginal 
+# Maximum Likelihood.
+require(ltm, quietly = TRUE)
+rasch.fit=rasch(rr)
+summary(rasch.fit)
+```
+
+```{r test_model_jags, message=FALSE}
+# We check the ability of the Bayesian model using Jags.
+mydata=list(r = rr, N = 1000, K = 4)
+parameters = c("alpha", "beta")
+inits1 = list(alpha = c(0,0,0,0), beta = 0.1)
+inits=list(inits1)
+
+library(R2jags)
+test_jags=jags(data = mydata,
+            inits = inits,
+            parameters.to.save = parameters,
+            model.file="/Users/mauriciofadelargerich/Dropbox/La Sapienza/SDS2/SDS_Final_Project/lsat-test-model.txt",
+            n.chains = 1,
+            n.iter = 2000)
+
+print(test_jags)
+```
+
+As it can be seen in the results, both methods approximate well the true values of the parameters, with the Bayesian analysis having a slightly better accuracy.
+
+# Estimating the Parameters for the LSAT Dataset
+Now that we've seen the Bayesian model is able to recover the true values of the parameters, let's try it on the dataset. To do this, let's run the model using Jags and also our own implementation of the Metropolis algorithm.
+
+## Jags and Bugs
+
+```{r jags_dataset, message=FALSE, warning=FALSE}
+set.seed(12345)
+
+# Loading the data.
+mydata=list(
+  response = matrix(c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 
+                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 
+                0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 
+                1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 
+                0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 
+                0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 
+                1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 
+                1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), nrow = 32, ncol = 5),
+  culm = c(3, 9, 11, 22, 23, 24, 27, 31, 32, 40, 40, 56, 56, 59, 61, 76, 
+            86, 115, 129, 210, 213, 241, 256, 336, 352, 408, 429, 602, 613, 
+            674, 702, 1000),
+  N = 1000,
+  R = 32,
+  K = 5)
+
+# We check the ability of the Bayesian model using Jags.
+parameters = c("a", "beta")
+inits1 = list(alpha = c(0,0,0,0,0), beta = 1)
+inits2 = list(alpha = c(1,1,1,1,1), beta = 2)
+inits=list(inits1, inits2)
+
+library(R2jags, quietly = TRUE)
+
+myjags=jags(data = mydata,
+            inits = inits,
+            parameters.to.save = parameters,
+            model.file="/Users/mauriciofadelargerich/Dropbox/La Sapienza/SDS2/SDS_Final_Project/lsat.txt",
+            n.chains = 2,
+            n.iter = 2000)
+
+print(myjags)
+```
+
+## Own Implementation of Metropolis
+
+```{r, metropolis_dataset}
+
+# To save space and effort, the data are saved in the multinomial format. 
+# Because of this we need to create the 5 times 1000 individual binary responses for each item and 
+# student using the index variable culm, where culm[i] = cumulative number of students recording 
+# response patterns 1, 2, i,..., N.
+response = mydata[[1]]
+culm = c(3, 9, 11, 22, 23, 24, 27, 31, 32, 40, 40, 56, 56, 59, 61, 76, 
+            86, 115, 129, 210, 213, 241, 256, 336, 352, 408, 429, 602, 613, 
+            674, 702, 1000)
+
+r = matrix(NA, nrow = 1000, ncol = 5)
+for (j in 1:culm[1]) {
+      r[j,] <- response[1, ];
+}
+for (i in 2:32) {
+  for (j in (culm[i-1] + 1):culm[i]) {
+     r[j,] <- response[i, ];
+  }
+}
+
+set.seed(1739634)
+
+# Full conditional for theta.
+new.theta.density <- function(theta_idx, theta, beta, alphas) {
+  den = prod((1+exp(beta*theta-alphas)))
+  return(exp((beta*theta*sum(r[theta_idx,]))-(theta^2/2))/den)
+}
+
+# Full conditional for alpha.
+new.alpha.density <- function(alpha_idx, beta, alphas, theta_rasch) {
+  den = sum(log(1+exp(beta*theta_rasch-alphas[alpha_idx])))
+  return((-alphas[alpha_idx]*sum(r[,alpha_idx])-(alphas[alpha_idx]^2)/10000)-den)
+}
+
+# Full conditional for beta.
+new.beta.density <- function(beta, alphas, theta_rasch) {
+  if (beta > 0) {
+    den = 0
+    for (k in 1:ncol(r)) {
+      den = den + sum(log(1+exp(beta*theta_rasch-alphas[k])))
+    }
+    return((beta*sum(theta_rasch*rowSums(r))-(beta^2/10000))-den)
+  } else {
+    return(-Inf)
+  }
+}
+
+# Metropolis
+
+# Initilization of the variables.
+S = 2000
+beta.vec = rep(NA,S+1)
+theta.mat = matrix(NA, nrow = S+1, ncol = nrow(r))
+alphas.mat = matrix(NA, nrow = S+1, ncol = ncol(r))
+# a is used for model tractability, imposing the condition that the sum of the
+# items difficulties is equal to 0.
+a = matrix(NA, nrow = S+1, ncol = ncol(r))
+
+# Initial values
+beta.vec[1] = 1
+# We initialize the thetas in the following way: 
+# theta_i = sum(scores_i)/#_of_items + epsilon (from a N(0,0.04))
+# This has shown to help the chain find its equilibrium quicker.
+theta.mat[1,] = rowSums(r)/(ncol(r)+1) + rnorm(1000, sd = 0.2)
+alphas.mat[1,] = c(0,0,0,0,0)
+
+for(t in 1:S) {
+    
+  # Thetas
+  for (th in 1:ncol(theta.mat)) {
+    # State of the chain at the current time (t)
+    z = theta.mat[t,th]
+    
+    # Draw a candidate for the next state of the chain at time (t+1)
+    theta.prop = z + runif(1, min = -0.2, max = 0.2)
+    
+    # Acceptance/rejection
+    omega = runif(1, min=0, max=1)
+    accept = new.theta.density(th, theta.prop, beta.vec[t], alphas.mat[t,]) / new.theta.density(th, z, beta.vec[t], alphas.mat[t,])
+    
+    if (omega < accept) {
+      theta.mat[t+1,th] = theta.prop
+    } else {
+      theta.mat[t+1,th] = z
+    }
+  }
+  
+  # Beta
+  # State of the chain at the current time (t)
+  z = beta.vec[t] 
+    
+  # Draw a candidate for the next/future state of the chain at time (t+1)
+  beta.prop = z + runif(1, min = -0.2, max = 0.2)
+  while (beta.prop <= 0) {
+    beta.prop = z + runif(1, min = -0.2, max = 0.2)
+  }
+  
+  # Acceptance/rejection
+  omega = runif(1, min=0, max=1)
+  accept = exp(new.beta.density(beta.prop, alphas.mat[t,], theta.mat[t+1,]) - new.beta.density(z, alphas.mat[t,], theta.mat[t+1,]))
+  
+  if (omega < accept) {
+    beta.vec[t+1] = beta.prop
+  } else {
+    beta.vec[t+1] = z
+  }
+  
+  # Alphas
+  alphas.mat[t+1,] = alphas.mat[t,]
+  for (colNumber in 1:(ncol(alphas.mat))) {
+    z = alphas.mat[t,colNumber]  # state of the chain at the current time (t)
+    
+    # Draw a candidate for the next/future state of the chain at time (t+1)
+    alpha.prop = z + runif(1, min = -2, max = 2)
+    alphas.mat[t+1,colNumber] = alpha.prop
+    
+    # acceptance/rejection
+    omega = runif(1, min=0, max=1)
+    accept = exp(new.alpha.density(colNumber, beta.vec[t+1], alphas.mat[t+1,], theta.mat[t+1,]) - new.alpha.density(colNumber, beta.vec[t], alphas.mat[t,], theta.mat[t+1,]))
+    
+    if (omega < accept) {
+      alphas.mat[t+1,colNumber] = alpha.prop
+      # For model tractability we impose the condition that the sum of the alphas is equal to 0.
+      a[t+1,colNumber] = alpha.prop - mean(alphas.mat[t+1,])
+    } else {
+      alphas.mat[t+1,colNumber] = z
+      # For model tractability we impose the condition that the sum of the alphas is equal to 0.
+      a[t+1,colNumber] = z - mean(alphas.mat[t+1,])
+    }
+  }
+}
+
+burn_in_samples = S/2
+
+acceptance_rate_beta = (1-sum(duplicated(beta.vec))/S)
+acceptance_rate_alpha1 = (1-sum(duplicated(a[,1]))/S)
+acceptance_rate_alpha2 = (1-sum(duplicated(a[,2]))/S)
+acceptance_rate_alpha3 = (1-sum(duplicated(a[,3]))/S)
+acceptance_rate_alpha4 = (1-sum(duplicated(a[,4]))/S)
+acceptance_rate_alpha5 = (1-sum(duplicated(a[,5]))/S)
+
+param_names = c("a1", "a2", "a3", "a4", "a5", "beta")
+param_means = c()
+param_mcerr = c()
+for (i in 1:ncol(a)) {
+  param_means = c(param_means, mean(a[burn_in_samples:S,i]))
+  param_mcerr = c(param_mcerr, sd(a[burn_in_samples:S,i]))
+}
+param_means = c(param_means, mean(beta.vec[burn_in_samples:S]))
+param_mcerr = c(param_mcerr, sd(beta.vec[burn_in_samples:S]))
+df = data.frame(param_means, param_mcerr, row.names = param_names)
+colnames(df) <- c("mean", "sd")
+print(knitr::kable(df,align = 'c'))
+
+```
+
+# Results discussion
+We can observe that both Jags and our own implementation of Metropolis arrive to very similar results. Each of the 5 items have different difficulty values, each depending on how many students did well with each of the question. As we can see, the difficulty of each item is related to the number of correct answers the whole population of student achieved. For instance, we can compare alpha1 = `r mean(a[burn_in_samples:S,1])`, for which `r sum(r[,1])` students answered correctly with alpha2 = `r mean(a[burn_in_samples:S,2])`, for which `r sum(r[,2])` students answered correctly.
+Regarding the students population, we can observe that the value of $\beta$ is around 0.76, and in addition we can also get the latent ability estimate $\theta_i$ for each student. The $\theta$ values are not shown because of the large amount of estimates they are, but we could check the ability estimate for student number 1: $\theta_1 =$ `r mean(theta.mat[burn_in_samples:S,1])` and student number 500: $\theta_{500} =$ `r mean(theta.mat[burn_in_samples:S,500])`. Again, we see that the ability of each student is related to how well they did on the test: student 1 answered correctly `r sum(r[1,])` questions and student 500 `r sum(r[500,])`.
+
+## Item Characteristic Curves
+The Item Characteristic Curve (ICC) or Item Response Function (IRF) shows the probability $p$ of a correct answer as a function of the ability $\theta$ of a given individual. 
+In the plot, we can see the ICCs for each of the 5 items in the LSAT Section 6 test. As it is noticeable, the higher the ability of the individual, the higher probability that the answer will be correct; while also the higher the difficulty of the item, the higher the ability needed to get a correct answer.
+
+```{r icc, message=FALSE, warning=FALSE, echo=FALSE}
+ability.curve <- function(x, beta, item_diff) { 
+  return(exp(beta*x-item_diff)/(1+exp(beta*x-item_diff)))
+}
+
+beta = mean(beta.vec[burn_in_samples:S])
+item_diff = c()
+curves_names = c()
+for (i in 1:ncol(alphas.mat)) {
+  item_diff = c(item_diff, mean(alphas.mat[burn_in_samples:S,i]))
+  curves_names = c(curves_names, paste0('a', i, ", diff = ", round(item_diff[i], digits = 2)))
+}
+
+n = length(item_diff)
+curves_colors = rainbow(n, s = 1, v = 1, start = 0, end = max(1, n - 1)/n, alpha = 1)
+
+# Run on non R markdown
+png('rplot.png', width = 800, height = 500)
+curve(ability.curve(x, beta, item_diff[1]), from = -10, to = 7, col = curves_colors[1], main = "Item Characteristic Curves", ylab = "Probability of correct answer", xlab = "Ability")
+for (i in 2:n) {
+  curve(ability.curve(x, beta, item_diff[i]), from = -10, to = 7, col = curves_colors[i], add = TRUE, main = "Item Characteristic Curves", ylab = "Probability of correct answer", xlab = "Ability")
+}
+legend('bottomright', curves_names, lty=1, col=curves_colors, bty='n', cex=.75)
+dev.off()
+
+```
+
+![](rplot.png)
+
+
+# Diagnostics
+
+## Traceplots of Parameters
+Traceplots are useful to analyse the behavior of the parameters along the chain. We want to try to avoid flat bits, i.e. the state of the parameter does not change for many iterations, or too many consecutive steps in one direction.
+The traceplots of the alphas and beta look fine, we can see how the value of the parameter changes between a range where we suppose that the true value of the parameter is.
+
+```{r traceplots}
+library(lattice)
+xyplot(as.mcmc(myjags),layout = c(1,4))
+```
+
+
+## Running means
+The running mean plots of each parameter are useful to determine if the MCMC tends to convergence. The running mean is the mean of all sampled values up to the last k iteration. If the MCMC tends to convergence, the running mean should stabilize over time.
+We can see that the running means for all the parameters stabilize in the posterior mean of each parameter.
+
+```{r running_means, message=FALSE, warning=FALSE}
+library(ggmcmc, quietly = TRUE)
+mod1.fit = ggs(as.mcmc(myjags))
+ggs_running(mod1.fit)
+```
+
+## Autocorrelation of Parameters
+Another way to check for convergence is to look at the autocorrelations between the samples returned by the MCMC. The autocorrelation with lag k shows the correlation of a variable with it self at k steps before. As we can see in the plots the autocorrelation becomes smaller as k increases, so we can consider our samples as independent.
+
+```{r autocorrelation}
+ggs_autocorrelation(mod1.fit)
+```
+
+## Gelman-Rubin
+The Gelman–Rubin diagnostic evaluates MCMC convergence by analyzing the difference between multiple Markov chains. The convergence is assessed by comparing the estimated between-chains and within-chain variances for each model parameter. Large differences between these variances indicate nonconvergence.
+We have run 2 chains using Jags so we can now calculate the Gelman-Rubin diagnostic. To calculate it in R we can simply use the library coda, which includes the function gelman.diag:
+
+```{r gelman-rubin}
+library(coda)
+gelman.diag(as.mcmc(myjags), multivariate = FALSE)
+```
+
+# An Alternative Model
+Let's suppose that we assume that all the items in the test have the same difficulty. For tractability we can fix this difficulty to 0, i.e. $\alpha = 0$. We are interested in the characteristics of the population: its SD $\beta$ and the latent ability parameter of each student $\theta_i$. Now we have a different Bayesian model:
+$$
+x_{ij} \sim Bernoulli(p_{ij}), \ \ \ \forall i = 1,...,N \\
+p_{ij} = \frac{exp(\beta\theta_i - \alpha)}{1+exp(\beta\theta_i-\alpha)} \\
+\theta_i \sim Normal(0, 1) \\
+\alpha = 0 \\
+\beta \sim N(0,100)
+$$
+
+We can run our model with Jags and check its results.
+
+```{r alt_model}
+# We check the ability of the Bayesian model using Jags.
+parameters = c("beta")
+inits1 = list(beta = 1)
+inits=list(inits1)
+
+library(R2jags, quietly = TRUE)
+myjags_alt=jags(data = mydata,
+            inits = inits,
+            parameters.to.save = parameters,
+            model.file="/Users/mauriciofadelargerich/Dropbox/La Sapienza/SDS2/SDS_Final_Project/lsat-alt.txt",
+            n.chains = 1,
+            n.iter = 2000)
+
+print(myjags_alt)
+```
+
+## Quick Diagnostics
+We can again do a quick graphical diagnostic of the alternative model. As we can see in the plots below, everything looks nice.
+```{r densities_alt_model}
+mod2.fit = ggs(as.mcmc(myjags_alt))
+ggs_running(mod2.fit)
+ggs_traceplot(mod2.fit)
+```
+
+
+## Is it really better?
+To compare both models we will use the *Deviance Information Criterion*. An intuition of the DIC is that it gives a measure for how well each model fits the data, while penalising for the number of parameters. A lower DIC is better.
+
+```{r comparison}
+print(c("DIC.model1" = myjags$BUGSoutput$DIC, "DIC.model2" = myjags_alt$BUGSoutput$DIC))
+```
+
+As we can see, the DIC of the original model is lower. Even though the original model uses more parameters (multiple alphas vs. just one), which is penalised by the DIC, it is fitting the data much better, outweighting this penalisation. With this information we can conclude that there is no evidence that indicates we should prefer the alternative model over the original one.
+
+# Sources
+* LSAT: Item Response - OpenBUGS Examples <http://www.openbugs.net/Examples/Lsat.html>
+* Lecture Slides from the Course of Statistical Methods in Data Science II by Prof. Luca Tardella, 2017.
+* A First Course in Bayesian Statistical Methods - Peter Hoff, Springer-Verlag Inc, 2009.
+* Rasch Model - Wikipedia, the free encyclopedia <https://en.wikipedia.org/wiki/Rasch_model>
+* Parameter Estimation in the Rasch Model <http://statmath.wu-wien.ac.at/people/hatz/psychometrics/10w/RM_handouts_3.pdf>
+* Model Comparison: Deviance-based approaches <https://web.as.uky.edu/statistics/users/pbreheny/701/S13/notes/2-19.pdf>
+* Practical session: MCMC diagnostics <http://sbfnk.github.io/mfiidd/mcmc_diagnostics.html>
+
+* * *
+<div class="footer"> &copy; 2016-2017 - Stat4DS2+CS - Fadel Argerich Mauricio
+
+[^1]: Rasch Model - Wikipedia, the free encyclopedia <https://en.wikipedia.org/wiki/Rasch_model>
+[^2]: Model Comparison: Deviance-based approaches <https://web.as.uky.edu/statistics/users/pbreheny/701/S13/notes/2-19.pdf>
+
+</div>
+
+
